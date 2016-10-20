@@ -31,14 +31,63 @@
 // "The Lego Mindstorms EV3 Discovery book" written by Laurens Valk                             //
 //////////////////////////////////////////////////////////////////////////////////////////////////
 
+using System;
+using MonoBrickFirmware;
+using MonoBrickFirmware.Display.Dialogs;
+using MonoBrickFirmware.Display;
+using MonoBrickFirmware.Movement;
+using System.Threading;
+using MonoBrickFirmware.Display.Menus;
+using SmallRobots.Ev3ControlLib.Menu;
+
 namespace SmallRobots.Snatch3r
 {
     class Program
     {
+        #region Static fields
+        static public MenuContainer container;
+        #endregion
         static void Main(string[] args)
         {
-            Snatch3r snatch3r = new Snatch3r();
+            Menu menu = new Menu("SNATCH3R");
+            container = new MenuContainer(menu);
+
+            menu.AddItem(new MainMenuItem("Command with IR", CommandWithIR_OnEnterPressed));
+            menu.AddItem(new MainMenuItem("Garbage collection", GarbageCollection_OnEnterPressed));
+            menu.AddItem(new MainMenuItem("Quit", Quit_OnEnterPressed));
+
+            container.Show();
+        }
+
+        private static void Quit_OnEnterPressed()
+        {
+            LcdConsole.Clear();
+            LcdConsole.WriteLine("Terminating");
+            // Wait a bit
+            Thread.Sleep(1000);
+            TerminateMenu();
+        }
+
+        public static void TerminateMenu()
+        {
+            container.Terminate();
+        }
+
+        private static void CommandWithIR_OnEnterPressed()
+        {
+            container.SuspendButtonEvents();
+            Snatch3r snatch3r = new Snatch3r(Snatch3rBehaviour.CommandedRemotely);
             snatch3r.Start();
+            container.ResumeButtonEvents();
+        }
+
+
+        private static void GarbageCollection_OnEnterPressed()
+        {
+            container.SuspendButtonEvents();
+            Snatch3r snatch3r = new Snatch3r(Snatch3rBehaviour.GarbageCollection);
+            snatch3r.Start();
+            container.ResumeButtonEvents();
         }
     }
 }
