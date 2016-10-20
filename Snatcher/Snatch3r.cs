@@ -360,7 +360,18 @@ namespace SmallRobots.Snatch3r
             leftTacho = ((Snatch3r)robot).leftMotor.GetTachoCount();
             rightTacho = ((Snatch3r)robot).rightMotor.GetTachoCount();
             gripperTacho = ((Snatch3r)robot).gripperMotor.GetTachoCount();
-            targetDistance = ((Snatch3r)robot).irSensor.ReadDistance();
+
+            if (selectedBehaviour == Snatch3rBehaviour.CommandedRemotely)
+            {
+                targetDistance = ((Snatch3r)robot).irSensor.ReadDistance();
+            }
+            else
+            {
+                if (((Snatch3r)robot).currentState == GarbageCollectionStates.drivingTowardBeacon)
+                    targetDistance = ((Snatch3r)robot).irSensor.ReadBeaconLocation().Distance;
+                else
+                    targetDistance = ((Snatch3r)robot).irSensor.ReadDistance();
+            }
 
             switch (selectedBehaviour)
             {
@@ -650,7 +661,8 @@ namespace SmallRobots.Snatch3r
         searchingBeacon,
         drivingTowardBeacon,
         deliveringTarget,
-        garbageCollectionComplete
+        garbageCollectionComplete,
+        stop
     }
 
     public class GarbageCollectionSMTask : PeriodicTask
@@ -677,6 +689,11 @@ namespace SmallRobots.Snatch3r
         bool swipeRightCompleted;
         bool swipeLeftCompleted;
 
+        // Delivering target
+        bool delivered;
+        bool halfTurnCompleted;
+        bool backStepped;
+
         // Distance from target
         int targetDistance;
         #endregion
@@ -692,14 +709,14 @@ namespace SmallRobots.Snatch3r
 
             // Set the current mission state
             waitingTimeBeforeStart = 1000;
-            objectsToCollect = 1;
+            objectsToCollect = 2;
             objectsCollected = 0;
             currentState = GarbageCollectionStates.starting;
             previousState = GarbageCollectionStates.garbageCollectionComplete;
 
             // Maximum speed
-            forwardPower = 80;
-            backwardPower = 50;
+            forwardPower = 70;
+            backwardPower = 40;
             turnPower = 25;
             gripperPower = 100;
 
@@ -725,30 +742,31 @@ namespace SmallRobots.Snatch3r
             switch (currentState)
             {
                 case GarbageCollectionStates.starting:
-                    {
-                        Starting_Case();
-                        break;
-                    }
+                    Starting_Case();
+                    break;
                 case GarbageCollectionStates.searchingNextTarget:
-                    {
-                        SearchingNextTarget_Case(robot);
-                        break;
-                    }
+                    SearchingNextTarget_Case(robot);
+                    break;
+            
                 case GarbageCollectionStates.drivingTowardNextTarget:
-                    {
-                        DrivingTowardNextTarget_Case(robot);
-                        break;
-                    }
+                    DrivingTowardNextTarget_Case(robot);
+                    break;
                 case GarbageCollectionStates.collectingTarget:
-                    {
-                        CollectingTarget_Case(robot);
-                        break;
-                    }
-                case GarbageCollectionStates.searchingBeacon:
-                    {
-                        SearchingBeacon_Case(robot);
-                        break;
-                    }
+                    CollectingTarget_Case(robot);
+                    break;             
+                case GarbageCollectionStates.searchingBeacon:                
+                    SearchingBeacon_Case(robot);
+                    break;
+                case GarbageCollectionStates.drivingTowardBeacon:
+                    DrivingTowardBeacon_Case(robot);
+                    break;
+                case GarbageCollectionStates.deliveringTarget:
+                    DeliveringTarget_Case(robot);
+                    break;
+                case GarbageCollectionStates.stop:
+                    currentLeftPower = 0;
+                    currentRightPower = 0;
+                    break;
                 default:
                     break;
             }
@@ -760,61 +778,6 @@ namespace SmallRobots.Snatch3r
             ((Snatch3r)robot).leftMotor.SetPower(currentLeftPower);
             ((Snatch3r)robot).rightMotor.SetPower(currentRightPower);
             ((Snatch3r)robot).gripperMotor.SetPower(currentGripperPower);
-        }
-
-        private void SearchingBeacon_Case(Robot robot)
-        {
-            if (previousState != GarbageCollectionStates.searchingBeacon)
-            {
-                // Initialize the ir sensor as beacon seeker
-                ((Snatch3r)robot).irSensor.Mode = IRMode.Seek;
-                previousState = GarbageCollectionStates.searchingBeacon;
-
-                // Reset the tacho count
-                ((Snatch3r)robot).leftMotor.ResetTacho();
-                swipeLeftCompleted = false;
-                swipeRightCompleted = false;
-
-                Thread.Sleep(200);
-            }
-
-            // Rotate right
-            if (!swipeRightCompleted)
-            {
-                currentLeftPower = (sbyte)turnPower;
-                currentRightPower = (sbyte)-turnPower;
-
-                if (((Snatch3r)robot).leftMotor.GetTachoCount() > 2 * halfSwipe)
-                {
-                    swipeRightCompleted = true;
-                }
-            }
-
-            // Rotate left
-            if (swipeRightCompleted && !swipeLeftCompleted)
-            {
-                currentLeftPower = (sbyte)-turnPower;
-                currentRightPower = (sbyte)turnPower;
-
-                if (((Snatch3r)robot).leftMotor.GetTachoCount() < -2 * halfSwipe)
-                {
-                    swipeLeftCompleted = true;
-                }
-            }
-
-            BeaconLocation beaconLocation = ((Snatch3r)robot).irSensor.ReadBeaconLocation();
-            int beaconHeading = beaconLocation.Location;
-            targetDistance = beaconLocation.Distance;
-
-            if ((beaconHeading < 5) && (beaconHeading > -5) && (beaconHeading != 0))
-            {
-                currentLeftPower = 0;
-                currentRightPower = 0;
-                swipeLeftCompleted = true;
-                swipeRightCompleted = true;
-                currentState = GarbageCollectionStates.drivingTowardBeacon;
-                previousState = GarbageCollectionStates.searchingBeacon;
-            }
         }
 
         private void Starting_Case()
@@ -895,7 +858,7 @@ namespace SmallRobots.Snatch3r
             targetDistance = ((Snatch3r)robot).irSensor.ReadDistance();
             // LcdConsole.WriteLine("Target distance: " + targetDistance.ToString());
 
-            if (targetDistance < 20)
+            if (targetDistance < 15)
             {
                 currentLeftPower = 0;
                 currentRightPower = 0;
@@ -922,6 +885,138 @@ namespace SmallRobots.Snatch3r
             {
                 currentGripperPower = 0;
                 currentState = GarbageCollectionStates.searchingBeacon;
+            }
+        }
+
+        private void SearchingBeacon_Case(Robot robot)
+        {
+            if (previousState != GarbageCollectionStates.searchingBeacon)
+            {
+                // Initialize the ir sensor as beacon seeker
+                ((Snatch3r)robot).irSensor.Mode = IRMode.Seek;
+                previousState = GarbageCollectionStates.searchingBeacon;
+
+                // Reset the tacho count
+                ((Snatch3r)robot).leftMotor.ResetTacho();
+                swipeLeftCompleted = false;
+                swipeRightCompleted = false;
+
+                Thread.Sleep(200);
+            }
+
+            // Rotate right
+            if (!swipeRightCompleted)
+            {
+                currentLeftPower = (sbyte)turnPower;
+                currentRightPower = (sbyte)-turnPower;
+
+                if (((Snatch3r)robot).leftMotor.GetTachoCount() > 2 * halfSwipe)
+                {
+                    swipeRightCompleted = true;
+                }
+            }
+
+            // Rotate left
+            if (swipeRightCompleted && !swipeLeftCompleted)
+            {
+                currentLeftPower = (sbyte)-turnPower;
+                currentRightPower = (sbyte)turnPower;
+
+                if (((Snatch3r)robot).leftMotor.GetTachoCount() < -2 * halfSwipe)
+                {
+                    swipeLeftCompleted = true;
+                }
+            }
+
+            BeaconLocation beaconLocation = ((Snatch3r)robot).irSensor.ReadBeaconLocation();
+            int beaconHeading = beaconLocation.Location;
+            targetDistance = beaconLocation.Distance;
+
+            if ((beaconHeading < 5) && (beaconHeading > -5) && (beaconHeading != 0))
+            {
+                currentLeftPower = 0;
+                currentRightPower = 0;
+                swipeLeftCompleted = true;
+                swipeRightCompleted = true;
+                currentState = GarbageCollectionStates.drivingTowardBeacon;
+                previousState = GarbageCollectionStates.searchingBeacon;
+            }
+        }
+
+        private void DrivingTowardBeacon_Case(Robot robot)
+        {
+            double kP = 0.2;
+            int powerDifference;
+            BeaconLocation beaconLocation;
+
+            beaconLocation = ((Snatch3r)robot).irSensor.ReadBeaconLocation();
+            if (beaconLocation.Distance > 30)
+            {
+                powerDifference = (int)(-kP * beaconLocation.Location * 0.3 * forwardPower);
+                currentLeftPower = (sbyte)(0.3 * forwardPower - powerDifference) > 0 ? (sbyte)(0.3 * forwardPower - powerDifference) : (sbyte) 0;
+                currentRightPower = (sbyte)(0.3 * forwardPower + powerDifference) > 0 ? (sbyte)(0.3 * forwardPower + powerDifference) : (sbyte)0;
+            }
+            else
+            {
+                currentRightPower = 0;
+                currentLeftPower = 0;
+                currentState = GarbageCollectionStates.deliveringTarget;
+            }
+        }
+
+        private void DeliveringTarget_Case(Robot robot)
+        {
+            if (previousState != GarbageCollectionStates.deliveringTarget)
+            {
+                previousState = GarbageCollectionStates.deliveringTarget;
+                ((Snatch3r)robot).leftMotor.ResetTacho();
+                halfTurnCompleted = false;
+                delivered = false;
+                backStepped = false;
+            }
+
+            if (!delivered)
+            {
+                int gripperTachoCount = ((Snatch3r)robot).gripperMotor.GetTachoCount();
+                if (gripperTachoCount > 0)
+                {
+                    currentGripperPower = (sbyte)-gripperPower;
+                }
+                else
+                {
+                    currentGripperPower = 0;
+                    delivered = true;
+                    objectsCollected = objectsCollected + 1;
+                }
+            }
+
+            if (delivered && !backStepped)
+            {
+                currentLeftPower = (sbyte) -backwardPower;
+                currentRightPower = (sbyte) -backwardPower;
+                if (((Snatch3r)robot).leftMotor.GetTachoCount() < -300)
+                {
+                    backStepped = true;
+                    currentLeftPower = 0;
+                    currentRightPower = 0;
+                    ((Snatch3r)robot).leftMotor.ResetTacho();
+                }
+            }
+
+            if (delivered && backStepped && !halfTurnCompleted)
+            {
+                currentLeftPower = (sbyte)turnPower;
+                currentRightPower = (sbyte)-turnPower;
+
+                if (((Snatch3r)robot).leftMotor.GetTachoCount() > 2*halfSwipe)
+                {
+                    halfTurnCompleted = true;
+                    if (objectsCollected >= objectsToCollect)
+                        currentState = GarbageCollectionStates.stop;
+                    else
+                        currentState = GarbageCollectionStates.starting;
+                    
+                }
             }
         }
 
