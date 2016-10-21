@@ -53,10 +53,19 @@ namespace SmallRobots.Snatch3r
             container = new MenuContainer(menu);
 
             menu.AddItem(new MainMenuItem("Command with IR", CommandWithIR_OnEnterPressed));
+            menu.AddItem(new MainMenuItem("Line follwing", LineFollowing_OnEnterPressed));
             menu.AddItem(new MainMenuItem("Garbage collection", GarbageCollection_OnEnterPressed));
             menu.AddItem(new MainMenuItem("Quit", Quit_OnEnterPressed));
 
             container.Show();
+        }
+
+        private static void LineFollowing_OnEnterPressed()
+        {
+            container.SuspendButtonEvents();
+            Snatch3r snatch3r = new Snatch3r(Snatch3rBehaviour.LineFollowing);
+            snatch3r.Start();
+            container.ResumeButtonEvents();
         }
 
         private static void Quit_OnEnterPressed()
