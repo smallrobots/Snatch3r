@@ -192,7 +192,7 @@ namespace SmallRobots.Snatch3r
                         LcdConsole.WriteLine("Line following Task OK");
 
                         // Line following PID Task
-                        lineFollowingPIDTask = new PIDController(100);
+                        lineFollowingPIDTask = new PIDController(50);
                         TaskScheduler.Add(lineFollowingPIDTask);
                         LcdConsole.WriteLine("Line following PID Task OK");
 
@@ -378,7 +378,7 @@ namespace SmallRobots.Snatch3r
             Action = OnTimer;
 
             // Set the period
-            Period = 250;
+            Period = 500;
 
             // Rendere initialization
             f = Font.MediumFont;
@@ -1081,7 +1081,7 @@ namespace SmallRobots.Snatch3r
         rotating,
         advancing,
         deliveringObstacle,
-        retractting,
+        retracting,
         counterRotating
     }
 
@@ -1091,7 +1091,6 @@ namespace SmallRobots.Snatch3r
         // Mission related
         LineFollowingTask_States currentState;
         LineFollowingTask_States previousState;
-        int waitingTimeBeforeStart;
 
         // Manouvering related
         readonly sbyte forwardPower;
@@ -1108,7 +1107,9 @@ namespace SmallRobots.Snatch3r
         readonly int waitingTimeBeforeStarting;
 
         // Line Following state
-
+        int colorSensorReading;
+        int setPoint;
+        int threshold;
         #endregion
 
         #region Public fields
@@ -1121,16 +1122,16 @@ namespace SmallRobots.Snatch3r
             Action = OnTimer;
 
             // Set the period
-            Period = 100;
+            Period = 50;
 
             // Fields initialization
             // Manouvering related
-            forwardPower = 40;
+            forwardPower = 25;
             backwardPower = 20;
             gripperPower = 100;
             turnPower = 20;
             halfSwipe = 400;
-            minDistanceFromObstacle = 10;
+            minDistanceFromObstacle = 8;
 
             // State initialization
             currentState = LineFollowingTask_States.starting;
@@ -1147,10 +1148,36 @@ namespace SmallRobots.Snatch3r
             switch (currentState)
             {
                 case LineFollowingTask_States.starting:
+                    Buttons.LedPattern(1);
                     Starting_Case();
                     break;
                 case LineFollowingTask_States.lineFollowing:
+                    Buttons.LedPattern(1);
                     LineFollowing_Case(robot);
+                    break;
+                case LineFollowingTask_States.grabbingObstacle:
+                    Buttons.LedPattern(2);
+                    GrabbingObstacle_Case(robot);
+                    break;
+                case LineFollowingTask_States.rotating:
+                    Buttons.LedPattern(2);
+                    Rotating_Case(robot);
+                    break;
+                case LineFollowingTask_States.advancing:
+                    Buttons.LedPattern(2);
+                    Advancing_Case(robot);
+                    break;
+                case LineFollowingTask_States.deliveringObstacle:
+                    Buttons.LedPattern(2);
+                    DeliveringObstacle_Case(robot);
+                    break;
+                case LineFollowingTask_States.retracting:
+                    Buttons.LedPattern(3);
+                    Retracting_Case(robot);
+                    break;
+                case LineFollowingTask_States.counterRotating:
+                    Buttons.LedPattern(3);
+                    CounterRotating_Case(robot);
                     break;
                 default:
                     currentLeftPower = 0;
@@ -1168,39 +1195,171 @@ namespace SmallRobots.Snatch3r
             ((Snatch3r)robot).gripperMotor.SetPower(currentGripperPower);
         }
 
+        private void CounterRotating_Case(Robot robot)
+        {
+            Snatch3r snatcher = (Snatch3r)robot;
+            if (previousState != LineFollowingTask_States.counterRotating)
+            {
+                previousState = LineFollowingTask_States.counterRotating;
+                snatcher.leftMotor.ResetTacho();
+            }
+            currentLeftPower = (sbyte)-turnPower;
+            currentRightPower = (sbyte)+turnPower;
+
+            if (snatcher.leftMotor.GetTachoCount() < -0.8*halfSwipe)
+            {
+                currentLeftPower = 0;
+                currentRightPower = 0;
+                currentState = LineFollowingTask_States.lineFollowing;
+            }
+        }
+
+        private void Retracting_Case(Robot robot)
+        {
+            Snatch3r snatcher = (Snatch3r)robot;
+            if (previousState != LineFollowingTask_States.retracting)
+            {
+                previousState = LineFollowingTask_States.retracting;
+                snatcher.leftMotor.ResetTacho();
+            }
+            currentLeftPower = (sbyte)-backwardPower;
+            currentRightPower = (sbyte)-backwardPower;
+
+            if (snatcher.leftMotor.GetTachoCount() < -halfSwipe)
+            {
+                currentLeftPower = 0;
+                currentRightPower = 0;
+                currentState = LineFollowingTask_States.counterRotating;
+            }
+        }
+
+        private void DeliveringObstacle_Case(Robot robot)
+        {
+            Snatch3r snatcher = (Snatch3r)robot;
+            if (previousState != LineFollowingTask_States.deliveringObstacle)
+            {
+                previousState = LineFollowingTask_States.deliveringObstacle;
+                snatcher.leftMotor.ResetTacho();
+            }
+
+            int gripperTachoCount = snatcher.gripperMotor.GetTachoCount();
+            if (gripperTachoCount > 0)
+            {
+                currentGripperPower = (sbyte)-gripperPower;
+            }
+            else
+            {
+                currentGripperPower = 0;
+                currentState = LineFollowingTask_States.retracting;
+            }
+        }
+
+        private void Advancing_Case(Robot robot)
+        {
+            Snatch3r snatcher = (Snatch3r)robot;
+            if (previousState != LineFollowingTask_States.advancing)
+            {
+                previousState = LineFollowingTask_States.advancing;
+                snatcher.leftMotor.ResetTacho();
+            }
+            currentLeftPower = (sbyte)forwardPower;
+            currentRightPower = (sbyte)forwardPower;
+
+            if (snatcher.leftMotor.GetTachoCount() > halfSwipe)
+            {
+                currentLeftPower = 0;
+                currentRightPower = 0;
+                currentState = LineFollowingTask_States.deliveringObstacle;
+            }
+        }
+
+        private void Rotating_Case(Robot robot)
+        {
+            Snatch3r snatcher = (Snatch3r)robot;
+            if (previousState != LineFollowingTask_States.rotating)
+            {
+                previousState = LineFollowingTask_States.rotating;
+                snatcher.leftMotor.ResetTacho();
+            }
+            currentLeftPower = (sbyte)turnPower;
+            currentRightPower = (sbyte)-turnPower;
+
+            if (snatcher.leftMotor.GetTachoCount() > halfSwipe)
+            {
+                currentLeftPower = 0;
+                currentRightPower = 0;
+                currentState = LineFollowingTask_States.advancing;
+            }
+        }
+
         private void LineFollowing_Case(Robot robot)
         {
             Snatch3r snatcher = (Snatch3r)robot;
             if (previousState != LineFollowingTask_States.lineFollowing)
             {
                 // Initialize the state
-                snatcher.lineFollowingPIDTask.Kp = 1;
-                snatcher.lineFollowingPIDTask.Ki = 0;
-                snatcher.lineFollowingPIDTask.Kd = 0;
-                snatcher.lineFollowingPIDTask.LowPassConstant = 1;
-                snatcher.lineFollowingPIDTask.SetPoint = 30;
-                snatcher.lineFollowingPIDTask.MaxPower = (sbyte) (0.5 * forwardPower);
-                snatcher.lineFollowingPIDTask.MinPower = (sbyte) (- 0.5 * forwardPower);
+                setPoint = 40;
+                threshold = 10;
+
+                snatcher.lineFollowingPIDTask.Kp = 0.8f;
+                snatcher.lineFollowingPIDTask.Ki = 0.3f;
+                snatcher.lineFollowingPIDTask.Kd = 0.1f;
+                snatcher.lineFollowingPIDTask.LowPassConstant = 0.7f;
+                snatcher.lineFollowingPIDTask.SetPoint = setPoint;
+                snatcher.lineFollowingPIDTask.MaxPower = (sbyte) (1.5*forwardPower);
+                snatcher.lineFollowingPIDTask.MinPower = (sbyte) (-1.5*forwardPower);
 
                 previousState = LineFollowingTask_States.lineFollowing;
             }
 
             // Give inputs to the PID
-            snatcher.lineFollowingPIDTask.ProcessVariableSignal = snatcher.colorSensor.Read();
+            colorSensorReading = snatcher.colorSensor.Read();
+            snatcher.lineFollowingPIDTask.ProcessVariableSignal = (Math.Abs(colorSensorReading - setPoint) < threshold) ? 0 : colorSensorReading;
 
             // Set outputs to the motors
             snatcher.steering = snatcher.lineFollowingPIDTask.OutputSignal;
             
             currentLeftPower = (sbyte) (forwardPower + 0.5*snatcher.steering);
-            currentRightPower = (sbyte) (forwardPower - 0.5 * snatcher.steering);
+            currentRightPower = (sbyte) (forwardPower - 0.5* snatcher.steering);
+
+            // Checks for obstacles
+            int targetDistance = snatcher.irSensor.ReadDistance();
+            if ((targetDistance < minDistanceFromObstacle) && (targetDistance>0))
+            {
+                currentLeftPower = 0;
+                currentRightPower = 0;
+                currentState = LineFollowingTask_States.grabbingObstacle;
+            }
             
         }
 
         private void Starting_Case()
         {
-            Thread.Sleep(waitingTimeBeforeStart);
+            Thread.Sleep(waitingTimeBeforeStarting);
             currentState = LineFollowingTask_States.lineFollowing;
             previousState = LineFollowingTask_States.starting;
+        }
+
+        private void GrabbingObstacle_Case(Robot robot)
+        {
+            Snatch3r snatcher = (Snatch3r)robot;
+            if (previousState != LineFollowingTask_States.grabbingObstacle)
+            {
+                previousState = LineFollowingTask_States.grabbingObstacle;
+                snatcher.gripperMotor.ResetTacho();
+                Thread.Sleep(100);
+            }
+
+            int gripperTachoCount = ((Snatch3r)robot).gripperMotor.GetTachoCount();
+            if (gripperTachoCount < 3500)
+            {
+                currentGripperPower = gripperPower;
+            }
+            else
+            {
+                currentGripperPower = 0;
+                currentState = LineFollowingTask_States.rotating;
+            }
         }
         #endregion
     }
