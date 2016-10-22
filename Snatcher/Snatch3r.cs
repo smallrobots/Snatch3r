@@ -1309,7 +1309,7 @@ namespace SmallRobots.Snatch3r
                 snatcher.lineFollowingPIDTask.MaxPower = (sbyte) (1.5*forwardPower);
                 snatcher.lineFollowingPIDTask.MinPower = (sbyte) (-1.5*forwardPower);
 
-                Thread soundThread = new Thread(new ThreadStart(() => { snatcher.speaker.PlaySoundFile("/home/root/apps/Snatch3r/trucks001.wav",10); }));
+                Thread soundThread = new Thread(new ThreadStart(() => { snatcher.speaker.PlaySoundFile("/home/root/apps/Snatch3r/trucks001.wav",250); }));
                 soundThread.Start();
                 // snatcher.speaker.PlaySoundFile("/home/root/apps/Snatch3r/trucks001.wav");
 

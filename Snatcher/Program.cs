@@ -90,7 +90,6 @@ namespace SmallRobots.Snatch3r
             container.ResumeButtonEvents();
         }
 
-
         private static void GarbageCollection_OnEnterPressed()
         {
             container.SuspendButtonEvents();
