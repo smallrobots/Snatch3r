@@ -117,7 +117,7 @@ namespace SmallRobots.Snatch3r
 
         // Line following behaviour related
         public LineFollowingTask_States currentLineFollowingState;
-        public PIDController lineFollowingPIDTask;
+        // public PIDController lineFollowingPIDTask;
         public sbyte steering;
         #endregion
 
@@ -191,10 +191,10 @@ namespace SmallRobots.Snatch3r
                         TaskScheduler.Add(new LineFollowingSMTask());
                         LcdConsole.WriteLine("Line following Task OK");
 
-                        // Line following PID Task
-                        lineFollowingPIDTask = new PIDController(50);
-                        TaskScheduler.Add(lineFollowingPIDTask);
-                        LcdConsole.WriteLine("Line following PID Task OK");
+                        //// Line following PID Task
+                        //lineFollowingPIDTask = new PIDController(50);
+                        //TaskScheduler.Add(lineFollowingPIDTask);
+                        //LcdConsole.WriteLine("Line following PID Task OK");
 
                         // HMI task
                         TaskScheduler.Add(new HmiTask(behaviour));
@@ -1103,6 +1103,8 @@ namespace SmallRobots.Snatch3r
         sbyte currentRightPower;
         sbyte currentGripperPower;
 
+        bool thisTimeToLeft;
+
         // Starting state
         readonly int waitingTimeBeforeStarting;
 
@@ -1110,6 +1112,7 @@ namespace SmallRobots.Snatch3r
         int colorSensorReading;
         int setPoint;
         int threshold;
+        SteeringLookUpTable lookUpTable;
         #endregion
 
         #region Public fields
@@ -1139,6 +1142,9 @@ namespace SmallRobots.Snatch3r
 
             // Starting state
             waitingTimeBeforeStarting = 500;
+
+            // Line Following State
+            lookUpTable = new SteeringLookUpTable();
         }
         #endregion
 
@@ -1203,14 +1209,32 @@ namespace SmallRobots.Snatch3r
                 previousState = LineFollowingTask_States.counterRotating;
                 snatcher.leftMotor.ResetTacho();
             }
-            currentLeftPower = (sbyte)-turnPower;
-            currentRightPower = (sbyte)+turnPower;
 
-            if (snatcher.leftMotor.GetTachoCount() < -0.8*halfSwipe)
+            if (!thisTimeToLeft)
             {
-                currentLeftPower = 0;
-                currentRightPower = 0;
-                currentState = LineFollowingTask_States.lineFollowing;
+                currentLeftPower = (sbyte)-turnPower;
+                currentRightPower = (sbyte)+turnPower;
+
+                if (snatcher.leftMotor.GetTachoCount() < -0.8 * halfSwipe)
+                {
+                    currentLeftPower = 0;
+                    currentRightPower = 0;
+                    currentState = LineFollowingTask_States.lineFollowing;
+                    thisTimeToLeft = !thisTimeToLeft;
+                }
+            }
+            else
+            {
+                currentLeftPower = (sbyte)turnPower;
+                currentRightPower = (sbyte)-turnPower;
+
+                if (snatcher.leftMotor.GetTachoCount() > 0.8 * halfSwipe)
+                {
+                    currentLeftPower = 0;
+                    currentRightPower = 0;
+                    currentState = LineFollowingTask_States.lineFollowing;
+                    thisTimeToLeft = !thisTimeToLeft;
+                }
             }
         }
 
@@ -1281,14 +1305,30 @@ namespace SmallRobots.Snatch3r
                 previousState = LineFollowingTask_States.rotating;
                 snatcher.leftMotor.ResetTacho();
             }
-            currentLeftPower = (sbyte)turnPower;
-            currentRightPower = (sbyte)-turnPower;
 
-            if (snatcher.leftMotor.GetTachoCount() > halfSwipe)
+            if (!thisTimeToLeft)
             {
-                currentLeftPower = 0;
-                currentRightPower = 0;
-                currentState = LineFollowingTask_States.advancing;
+                currentLeftPower = (sbyte)turnPower;
+                currentRightPower = (sbyte)-turnPower;
+
+                if (snatcher.leftMotor.GetTachoCount() > halfSwipe)
+                {
+                    currentLeftPower = 0;
+                    currentRightPower = 0;
+                    currentState = LineFollowingTask_States.advancing;
+                }
+            }
+            else
+            {
+                currentLeftPower = (sbyte)-turnPower;
+                currentRightPower = (sbyte)turnPower;
+
+                if (snatcher.leftMotor.GetTachoCount() < -halfSwipe)
+                {
+                    currentLeftPower = 0;
+                    currentRightPower = 0;
+                    currentState = LineFollowingTask_States.advancing;
+                }
             }
         }
 
@@ -1301,13 +1341,13 @@ namespace SmallRobots.Snatch3r
                 setPoint = 40;
                 threshold = 10;
 
-                snatcher.lineFollowingPIDTask.Kp = 0.8f;
-                snatcher.lineFollowingPIDTask.Ki = 0.3f;
-                snatcher.lineFollowingPIDTask.Kd = 0.1f;
-                snatcher.lineFollowingPIDTask.LowPassConstant = 0.7f;
-                snatcher.lineFollowingPIDTask.SetPoint = setPoint;
-                snatcher.lineFollowingPIDTask.MaxPower = (sbyte) (1.5*forwardPower);
-                snatcher.lineFollowingPIDTask.MinPower = (sbyte) (-1.5*forwardPower);
+                //snatcher.lineFollowingPIDTask.Kp = 0.8f;
+                //snatcher.lineFollowingPIDTask.Ki = 0.3f;
+                //snatcher.lineFollowingPIDTask.Kd = 0.1f;
+                //snatcher.lineFollowingPIDTask.LowPassConstant = 0.7f;
+                //snatcher.lineFollowingPIDTask.SetPoint = setPoint;
+                //snatcher.lineFollowingPIDTask.MaxPower = (sbyte) (1.5*forwardPower);
+                //snatcher.lineFollowingPIDTask.MinPower = (sbyte) (-1.5*forwardPower);
 
                 Thread soundThread = new Thread(new ThreadStart(() => { snatcher.speaker.PlaySoundFile("/home/root/apps/Snatch3r/trucks001.wav",250); }));
                 soundThread.Start();
@@ -1318,11 +1358,13 @@ namespace SmallRobots.Snatch3r
 
             // Give inputs to the PID
             colorSensorReading = snatcher.colorSensor.Read();
-            snatcher.lineFollowingPIDTask.ProcessVariableSignal = (Math.Abs(colorSensorReading - setPoint) < threshold) ? 0 : colorSensorReading;
+            //snatcher.lineFollowingPIDTask.ProcessVariableSignal = (Math.Abs(colorSensorReading - setPoint) < threshold) ? 0 : colorSensorReading;
 
-            // Set outputs to the motors
-            snatcher.steering = snatcher.lineFollowingPIDTask.OutputSignal;
-            
+            //// Set outputs to the motors
+            //snatcher.steering = snatcher.lineFollowingPIDTask.OutputSignal;
+
+            snatcher.steering = (sbyte)lookUpTable.GetValue(colorSensorReading);
+
             currentLeftPower = (sbyte) (forwardPower + 0.5*snatcher.steering);
             currentRightPower = (sbyte) (forwardPower - 0.5* snatcher.steering);
 
@@ -1351,7 +1393,13 @@ namespace SmallRobots.Snatch3r
             {
                 previousState = LineFollowingTask_States.grabbingObstacle;
                 snatcher.gripperMotor.ResetTacho();
-                Thread.Sleep(100);
+
+                // This function does nothing, body is completely commented into the library
+                snatcher.speaker.StopSoundPlayback();
+
+                Thread.Sleep(500);
+                Thread soundThread = new Thread(new ThreadStart(() => { snatcher.speaker.PlaySoundFile("/home/root/apps/Snatch3r/BeepBeep.wav", 250); }));
+                soundThread.Start();
             }
 
             int gripperTachoCount = ((Snatch3r)robot).gripperMotor.GetTachoCount();
