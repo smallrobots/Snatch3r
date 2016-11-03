@@ -31,71 +31,71 @@
 // "The Lego Mindstorms EV3 Discovery book" written by Laurens Valk                             //
 //////////////////////////////////////////////////////////////////////////////////////////////////
 
-using System;
-using MonoBrickFirmware;
-using MonoBrickFirmware.Display.Dialogs;
 using MonoBrickFirmware.Display;
-using MonoBrickFirmware.Movement;
-using System.Threading;
-using MonoBrickFirmware.Display.Menus;
-using SmallRobots.Ev3ControlLib.Menu;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
 
 namespace SmallRobots.Snatch3r
 {
-    class Program
+    public class Range
     {
-        #region Static fields
-        static public MenuContainer container;
-        #endregion
-        static void Main(string[] args)
+        public double MinExtreme { get; set; }
+        public double MaxExtreme { get; set; }
+
+        public double Value { get; set; }
+
+        public Range()
         {
-            Menu menu = new Menu("SNATCH3R");
-            container = new MenuContainer(menu);
-
-            menu.AddItem(new MainMenuItem("Command with IR", CommandWithIR_OnEnterPressed));
-            menu.AddItem(new MainMenuItem("Line following", LineFollowing_OnEnterPressed));
-            menu.AddItem(new MainMenuItem("Garbage collection", GarbageCollection_OnEnterPressed));
-            menu.AddItem(new MainMenuItem("Quit", Quit_OnEnterPressed));
-
-            container.Show();
+            MinExtreme = 0;
+            MaxExtreme = 0;
+            Value = 0;
         }
 
-        private static void LineFollowing_OnEnterPressed()
+        public Range (double theMinExtreme, double theMaxExtreme, double theValue)
         {
-            container.SuspendButtonEvents();
-            Snatch3r snatch3r = new Snatch3r(Snatch3rBehaviour.LineFollowing);
-            snatch3r.Start();
-            container.ResumeButtonEvents();
+            MinExtreme = theMinExtreme;
+            MaxExtreme = theMaxExtreme;
+            Value = theValue;
+        }
+    }
+
+    public class SteeringLookUpTable
+    {
+        List<Range> lookUpTable;
+
+        public SteeringLookUpTable()
+        {
+            lookUpTable = new List<Range>();
+
+            lookUpTable.Add(new Range( 0, 10 , 60));
+            lookUpTable.Add(new Range(11, 20, 40));
+            lookUpTable.Add(new Range(21, 30, 20));
+            lookUpTable.Add(new Range(31, 35, 10));
+            lookUpTable.Add(new Range(36, 40, 5));
+            lookUpTable.Add(new Range(41, 45, -5));
+            lookUpTable.Add(new Range(46, 50, -10));
+            lookUpTable.Add(new Range(51, 60, -20));
+            lookUpTable.Add(new Range(61, 70, -40));
+            lookUpTable.Add(new Range(71, 100, -80));
         }
 
-        private static void Quit_OnEnterPressed()
+        public double GetValue(double theKey)
         {
-            LcdConsole.Clear();
-            LcdConsole.WriteLine("Terminating");
-            // Wait a bit
-            Thread.Sleep(1000);
-            TerminateMenu();
-        }
+            double retValue = 0.0d;
 
-        public static void TerminateMenu()
-        {
-            container.Terminate();
-        }
+            for (int i = 0; i < lookUpTable.Count; i++)
+            {
+                if ((theKey >= lookUpTable[i].MinExtreme) && (theKey < lookUpTable[i].MaxExtreme))
+                {
+                    retValue = lookUpTable[i].Value;
+                    break;
+                }
+            }
 
-        private static void CommandWithIR_OnEnterPressed()
-        {
-            container.SuspendButtonEvents();
-            Snatch3r snatch3r = new Snatch3r(Snatch3rBehaviour.CommandedRemotely);
-            snatch3r.Start();
-            container.ResumeButtonEvents();
-        }
-
-        private static void GarbageCollection_OnEnterPressed()
-        {
-            container.SuspendButtonEvents();
-            Snatch3r snatch3r = new Snatch3r(Snatch3rBehaviour.GarbageCollection);
-            snatch3r.Start();
-            container.ResumeButtonEvents();
+            return retValue;
         }
     }
 }
